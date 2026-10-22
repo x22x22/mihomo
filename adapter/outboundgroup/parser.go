@@ -213,6 +213,13 @@ func ParseProxyGroup(config map[string]any, proxyMap map[string]C.Proxy, provide
 			return nil, err
 		}
 		return NewLoadBalance(groupOption, opt, emptyFallback, providers)
+	case "quota-balance":
+		opt := QuotaBalanceOption{}
+		err = decoder.Decode(config, &opt)
+		if err != nil {
+			return nil, err
+		}
+		return NewQuotaBalance(groupOption, opt, emptyFallback, providers)
 	case "relay":
 		return nil, fmt.Errorf("%w: The group [%s] with relay type was removed, please using dialer-proxy instead", errType, groupName)
 	default:
