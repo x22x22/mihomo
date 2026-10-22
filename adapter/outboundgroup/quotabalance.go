@@ -128,30 +128,28 @@ func (q *QuotaBalance) selectAndReserve(metadata *C.Metadata, touch bool) C.Prox
 	defer q.mu.Unlock()
 	proxy := q.selectBest(metadata, touch)
 	if proxy != nil {
-		q.loadOf(proxy.Name()).Add(1)
+		load := q.loadOf(proxy.Name()).Add(1)
+		q.logSelect(proxy, load)
 	}
 	return proxy
 }
 
-// Unwrap 供组 API / 面板展示使用（不计数）。
-func (q *QuotaBalance) Unwrap(metadata *C.Metadata, touch bool) C.Proxy {
-	proxy := q.selectBest(metadata, touch)
-	if proxy == nil {
-		return nil
-	}
-	// 限流日志（每秒最多一条），便于稳定性分析
+// logSelect 输出限流的选择日志（每秒最多一条），记录实际选择、实时预留计数与延迟。
+func (q *QuotaBalance) logSelect(proxy C.Proxy, load int64) {
 	now := time.Now().UnixNano()
 	last := q.logLast.Load()
 	if now-last > int64(time.Second) && q.logLast.CompareAndSwap(last, now) {
-		conns, bytes := int64(0), int64(0)
+		bytes := int64(0)
 		if v, ok := q.stats.Load(proxy.Name()); ok {
-			st := v.(*quotaStat)
-			conns = st.connections.Load()
-			bytes = st.bytes.Load()
+			bytes = v.(*quotaStat).bytes.Load()
 		}
-		log.Infoln("[QuotaBalance] %s -> %s (conns=%d bytes=%d delay=%dms)", q.Name(), proxy.Name(), conns, bytes, proxy.LastDelayForTestUrl(q.testUrl))
+		log.Infoln("[QuotaBalance] %s -> %s (load=%d bytes=%d delay=%dms)", q.Name(), proxy.Name(), load, bytes, proxy.LastDelayForTestUrl(q.testUrl))
 	}
-	return proxy
+}
+
+// Unwrap 供组 API / 面板展示使用（不计数，实际选择与日志在 selectAndReserve）。
+func (q *QuotaBalance) Unwrap(metadata *C.Metadata, touch bool) C.Proxy {
+	return q.selectBest(metadata, touch)
 }
 
 func (q *QuotaBalance) DialContext(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
